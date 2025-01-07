@@ -28,8 +28,9 @@ const PopOver = ({
       </PopoverTrigger>
       <PopoverContent
         className={cn("bg-[#1D1D1D] shadow-lg rounded-xl", className)}
-        align="end"
-        side="bottom"
+        align="center"
+        side="right"
+        sideOffset={5}
         onClick={(e) => e.stopPropagation()}
       >
         {children}
