@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
               );
 
               const smart_ai_message = await openai.chat.completions.create({
-                model: "gpt-3.5-turbo",
+                model: "gpt-4o-mini",
                 messages,
                 temperature: 0.7,
                 max_tokens: 150,
@@ -164,6 +164,29 @@ export async function POST(req: NextRequest) {
               console.error(
                 "[Webhook Error] Full error: " + JSON.stringify(error)
               );
+
+              // If it's a quota error, send a fallback message
+              if (error instanceof Error && error.message.includes("quota")) {
+                console.error(
+                  "[Webhook Debug] Using fallback response due to quota error"
+                );
+                const direct_message = await sendDM(
+                  webhook_payload.entry[0].id,
+                  webhook_payload.entry[0].messaging[0].sender.id,
+                  "I apologize, but I'm currently experiencing high traffic. Please try again later or contact support.",
+                  automation.User?.integrations[0].token!
+                );
+
+                if (direct_message.status === 200) {
+                  return NextResponse.json(
+                    {
+                      message: "Fallback message sent",
+                    },
+                    { status: 200 }
+                  );
+                }
+              }
+
               throw error;
             }
           }
