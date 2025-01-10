@@ -1,15 +1,15 @@
-import { client } from '@/lib/prisma'
+import { client } from "@/lib/prisma";
 
 export const matchKeyword = async (keyword: string) => {
   return await client.keyword.findFirst({
     where: {
       word: {
         equals: keyword,
-        mode: 'insensitive',
+        mode: "insensitive",
       },
     },
-  })
-}
+  });
+};
 
 export const getKeywordAutomation = async (
   automationId: string,
@@ -24,7 +24,7 @@ export const getKeywordAutomation = async (
       dms: dm,
       trigger: {
         where: {
-          type: dm ? 'DM' : 'COMMENT',
+          type: dm ? "DM" : "COMMENT",
         },
       },
       listener: true,
@@ -43,13 +43,13 @@ export const getKeywordAutomation = async (
         },
       },
     },
-  })
-}
+  });
+};
 export const trackResponses = async (
   automationId: string,
-  type: 'COMMENT' | 'DM'
+  type: "COMMENT" | "DM"
 ) => {
-  if (type === 'COMMENT') {
+  if (type === "COMMENT") {
     return await client.listener.update({
       where: { automationId },
       data: {
@@ -57,10 +57,10 @@ export const trackResponses = async (
           increment: 1,
         },
       },
-    })
+    });
   }
 
-  if (type === 'DM') {
+  if (type === "DM") {
     return await client.listener.update({
       where: { automationId },
       data: {
@@ -68,9 +68,9 @@ export const trackResponses = async (
           increment: 1,
         },
       },
-    })
+    });
   }
-}
+};
 
 export const createChatHistory = (
   automationId: string,
@@ -91,8 +91,8 @@ export const createChatHistory = (
         },
       },
     },
-  })
-}
+  });
+};
 
 export const getKeywordPost = async (postId: string, automationId: string) => {
   return await client.post.findFirst({
@@ -100,28 +100,26 @@ export const getKeywordPost = async (postId: string, automationId: string) => {
       AND: [{ postid: postId }, { automationId }],
     },
     select: { automationId: true },
-  })
-}
+  });
+};
 
 export const getChatHistory = async (sender: string, reciever: string) => {
   const history = await client.dms.findMany({
     where: {
       AND: [{ senderId: sender }, { reciever }],
     },
-    orderBy: { createdAt: 'asc' },
-  })
-  const chatSession: {
-    role: 'assistant' | 'user'
-    content: string
-  }[] = history.map((chat) => {
+    orderBy: { createdAt: "asc" },
+  });
+  const chatSession = history.map((chat) => {
+    const role = chat.reciever ? "assistant" : "user";
     return {
-      role: chat.reciever ? 'assistant' : 'user',
+      role: role as "assistant" | "user",
       content: chat.message!,
-    }
-  })
+    };
+  });
 
   return {
     history: chatSession,
-    automationId: history[history.length - 1].automationId,
-  }
-}
+    automationId: history[history.length - 1]?.automationId,
+  };
+};
