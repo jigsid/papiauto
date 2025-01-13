@@ -221,6 +221,75 @@ export async function POST(req: NextRequest) {
             }
           }
         }
+      } else if (webhook_payload.entry[0].changes) {
+        // Handle comment automations
+        const automation = await getKeywordAutomation(
+          matcher.automationId,
+          false
+        );
+
+        if (automation && automation.trigger) {
+          if (
+            automation.listener &&
+            automation.listener.listener === "MESSAGE"
+          ) {
+            console.error("[Webhook Debug] Sending automated comment reply");
+            try {
+              // Check if we've already responded to this comment
+              const commentId = webhook_payload.entry[0].changes[0].value.id;
+              const parentId =
+                webhook_payload.entry[0].changes[0].value.parent_id;
+
+              // Only respond if this is a new parent comment (not a reply)
+              if (!parentId) {
+                // Send the comment reply
+                const comment_reply = await sendPrivateMessage(
+                  webhook_payload.entry[0].id,
+                  commentId,
+                  automation.listener.commentReply ||
+                    automation.listener.prompt,
+                  automation.User?.integrations[0].token!
+                );
+
+                // Send DM to the commenter
+                const direct_message = await sendDM(
+                  webhook_payload.entry[0].id,
+                  webhook_payload.entry[0].changes[0].value.from.id,
+                  automation.listener.prompt,
+                  automation.User?.integrations[0].token!
+                );
+
+                if (
+                  comment_reply.status === 200 &&
+                  direct_message.status === 200
+                ) {
+                  // Track both responses
+                  await trackResponses(automation.id, "COMMENT");
+                  await trackResponses(automation.id, "DM");
+
+                  return NextResponse.json(
+                    { message: "Automated replies sent" },
+                    { status: 200 }
+                  );
+                }
+
+                return NextResponse.json(
+                  { message: "Failed to send replies" },
+                  { status: 500 }
+                );
+              } else {
+                // Skip if this is a reply to another comment
+                return NextResponse.json(
+                  { message: "Skipping reply to comment" },
+                  { status: 200 }
+                );
+              }
+            } catch (error) {
+              console.error("[Webhook Error] Comment/DM reply error:", error);
+              throw error;
+            }
+          }
+        }
       }
     }
 
