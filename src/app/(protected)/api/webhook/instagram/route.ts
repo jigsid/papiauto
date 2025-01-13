@@ -189,10 +189,45 @@ export async function POST(req: NextRequest) {
 
               throw error;
             }
+          } else if (
+            automation.listener &&
+            automation.listener.listener === "MESSAGE"
+          ) {
+            // Handle regular message automation
+            console.error("[Webhook Debug] Sending regular automated message");
+            try {
+              const direct_message = await sendDM(
+                webhook_payload.entry[0].id,
+                webhook_payload.entry[0].messaging[0].sender.id,
+                automation.listener.prompt,
+                automation.User?.integrations[0].token!
+              );
+
+              if (direct_message.status === 200) {
+                const tracked = await trackResponses(automation.id, "DM");
+                return NextResponse.json(
+                  { message: "Automated message sent" },
+                  { status: 200 }
+                );
+              }
+
+              return NextResponse.json(
+                { message: "Failed to send automated message" },
+                { status: 500 }
+              );
+            } catch (error) {
+              console.error("[Webhook Error] Regular message error:", error);
+              throw error;
+            }
           }
         }
       }
     }
+
+    return NextResponse.json(
+      { message: "No valid automation type found" },
+      { status: 200 }
+    );
   } catch (error) {
     console.error(
       "[Webhook Error] Main error: " +
