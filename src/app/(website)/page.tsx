@@ -194,7 +194,7 @@ export default function Home() {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                   >
-                    <Button className="bg-white text-primary hover:bg-blue-50 transition-all group relative overflow-hidden">
+                    <Button className="bg-black text-white hover:bg-blue-50 hover:text-black transition-all group relative overflow-hidden">
                       <Link
                         href="/dashboard"
                         className="flex items-center gap-2"
@@ -265,7 +265,10 @@ export default function Home() {
                   size="lg"
                   className="bg-blue-600 text-white hover:bg-blue-700 transform hover:scale-105 transition-all group relative overflow-hidden"
                 >
-                  <span className="relative z-10 flex items-center gap-2">
+                  <Link
+                    href="/dashboard"
+                    className="relative z-10 flex items-center gap-2"
+                  >
                     Get Started
                     <motion.div
                       animate={{ x: [0, 5, 0] }}
@@ -273,8 +276,7 @@ export default function Home() {
                     >
                       <ArrowRight className="w-5 h-5" />
                     </motion.div>
-                  </span>
-                  <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </Link>
                 </Button>
                 <Button
                   size="lg"
