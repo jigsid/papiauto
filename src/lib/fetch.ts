@@ -57,22 +57,26 @@ export const sendPrivateMessage = async (
 
 export const generateTokens = async (code: string) => {
   try {
-    const insta_form = new FormData();
-    insta_form.append("client_id", process.env.INSTAGRAM_CLIENT_ID as string);
-    insta_form.append(
+    // Use URLSearchParams instead of FormData for server-side compatibility
+    const params = new URLSearchParams();
+    params.append("client_id", process.env.INSTAGRAM_CLIENT_ID as string);
+    params.append(
       "client_secret",
       process.env.INSTAGRAM_CLIENT_SECRET as string
     );
-    insta_form.append("grant_type", "authorization_code");
-    insta_form.append(
+    params.append("grant_type", "authorization_code");
+    params.append(
       "redirect_uri",
       `${process.env.NEXT_PUBLIC_HOST_URL}/callback/instagram`
     );
-    insta_form.append("code", code);
+    params.append("code", code);
 
     const shortTokenRes = await fetch(process.env.INSTAGRAM_TOKEN_URL as string, {
       method: "POST",
-      body: insta_form,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params,
     });
 
     const token = await shortTokenRes.json();
