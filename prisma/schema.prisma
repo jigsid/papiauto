@@ -46,17 +46,18 @@ model Integrations {
 }
 
 model Automation {
-  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name      String    @default("Untitled")
-  createdAt DateTime  @default(now())
-  active    Boolean   @default(false)
-  trigger   Trigger[]
-  listener  Listener?
-  posts     Post[]
-  dms       Dms[]
-  User      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String?   @db.Uuid
-  keywords  Keyword[]
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String            @default("Untitled")
+  createdAt        DateTime          @default(now())
+  active           Boolean           @default(false)
+  trigger          Trigger[]
+  listener         Listener?
+  posts            Post[]
+  dms              Dms[]
+  User             User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId           String?           @db.Uuid
+  keywords         Keyword[]
+  processedComments ProcessedComment[]
 }
 
 model Dms {
@@ -104,6 +105,17 @@ model Keyword {
   automationId String?     @db.Uuid
 
   @@unique([automationId, word]) //this constraints ensure user cant use the same keyword on multiple automations
+}
+
+model ProcessedComment {
+  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  commentId    String
+  processed    Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  Automation   Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  automationId String     @db.Uuid
+
+  @@unique([automationId, commentId])
 }
 
 enum SUBSCRIPTION_PLAN {

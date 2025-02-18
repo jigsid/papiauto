@@ -8,10 +8,20 @@ import {
   trackResponses,
 } from "@/actions/webhook/queries";
 import { sendDM, sendPrivateMessage } from "@/lib/fetch";
-import { openai } from "@/lib/openai";
+import { generateResponse } from "@/lib/gemini";
 import { client } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
+
+// Track processed comments in memory for now since we can't use the database
+const processedComments = new Set<string>();
+
+async function isCommentProcessed(commentId: string) {
+  return processedComments.has(commentId);
+}
+
+async function markCommentAsProcessed(commentId: string) {
+  processedComments.add(commentId);
+}
 
 export async function GET(req: NextRequest) {
   const hub = req.nextUrl.searchParams.get("hub.challenge");
@@ -27,260 +37,91 @@ export async function POST(req: NextRequest) {
         JSON.stringify(webhook_payload, null, 2)
     );
 
+    // Handle DM messages
     if (webhook_payload.entry[0].messaging) {
       matcher = await matchKeyword(
         webhook_payload.entry[0].messaging[0].message.text
       );
-      console.error(
-        "[Webhook Debug] Message text: " +
-          webhook_payload.entry[0].messaging[0].message.text
-      );
-    }
-
-    if (webhook_payload.entry[0].changes) {
-      matcher = await matchKeyword(
-        webhook_payload.entry[0].changes[0].value.text
-      );
-      console.error(
-        "[Webhook Debug] Changes text: " +
-          webhook_payload.entry[0].changes[0].value.text
-      );
-    }
-
-    if (matcher && matcher.automationId) {
-      console.error(
-        "[Webhook Debug] Matched automation ID: " + matcher.automationId
-      );
-
-      if (webhook_payload.entry[0].messaging) {
-        const automation = await getKeywordAutomation(
-          matcher.automationId,
-          true
-        );
-        console.error(
-          "[Webhook Debug] Found automation: " +
-            JSON.stringify({
-              id: automation?.id,
-              listener: automation?.listener?.listener,
-              plan: automation?.User?.subscription?.plan,
-            })
-        );
-
+      
+      if (matcher && matcher.automationId) {
+        const automation = await getKeywordAutomation(matcher.automationId, true);
+        
         if (automation && automation.trigger) {
+          // Handle Smart AI responses
           if (
             automation.listener &&
             automation.listener.listener === "SMARTAI" &&
             automation.User?.subscription?.plan === "PRO"
           ) {
-            console.error("[Webhook Debug] Starting Smart AI processing");
-            try {
-              const customer_history = await getChatHistory(
-                webhook_payload.entry[0].messaging[0].sender.id,
-                webhook_payload.entry[0].messaging[0].recipient.id
-              );
-
-              const messages = [
-                {
-                  role: "system" as const,
-                  content: `${automation.listener?.prompt}: Keep responses under 2 sentences`,
-                },
-                ...(customer_history?.history || []).map((msg) => ({
-                  role: msg.role as "assistant" | "user",
-                  content: msg.content,
-                })),
-                {
-                  role: "user" as const,
-                  content: webhook_payload.entry[0].messaging[0].message.text,
-                },
-              ];
-
-              console.error(
-                "[Webhook Debug] Sending messages to OpenAI:",
-                JSON.stringify(messages)
-              );
-
-              const smart_ai_message = await openai.chat.completions.create({
-                model: "gpt-4o-mini",
-                messages,
-                temperature: 0.7,
-                max_tokens: 150,
-              });
-
-              console.error(
-                "[Webhook Debug] OpenAI response received: " +
-                  smart_ai_message.choices[0].message.content
-              );
-
-              if (smart_ai_message.choices[0].message.content) {
-                console.error("[Webhook Debug] Creating chat history");
-                const reciever = createChatHistory(
-                  automation.id,
-                  webhook_payload.entry[0].messaging[0].sender.id,
-                  webhook_payload.entry[0].messaging[0].recipient.id,
-                  webhook_payload.entry[0].messaging[0].message.text
-                );
-
-                const sender = createChatHistory(
-                  automation.id,
-                  webhook_payload.entry[0].messaging[0].recipient.id,
-                  webhook_payload.entry[0].messaging[0].sender.id,
-                  smart_ai_message.choices[0].message.content
-                );
-
-                await client.$transaction([reciever, sender]);
-                console.error(
-                  "[Webhook Debug] Chat history created successfully"
-                );
-
-                console.error("[Webhook Debug] Sending DM");
-                const direct_message = await sendDM(
-                  webhook_payload.entry[0].id,
-                  webhook_payload.entry[0].messaging[0].sender.id,
-                  smart_ai_message.choices[0].message.content,
-                  automation.User?.integrations[0].token!
-                );
-                console.error(
-                  "[Webhook Debug] DM response status: " + direct_message.status
-                );
-
-                if (direct_message.status === 200) {
-                  const tracked = await trackResponses(automation.id, "DM");
-                  console.error("[Webhook Debug] Response tracked: " + tracked);
-                  if (tracked) {
-                    return NextResponse.json(
-                      {
-                        message: "Message sent",
-                      },
-                      { status: 200 }
-                    );
-                  }
-                }
-              }
-            } catch (error) {
-              console.error(
-                "[Webhook Error] Smart AI processing error: " +
-                  (error instanceof Error ? error.message : "Unknown error")
-              );
-              console.error(
-                "[Webhook Error] Full error: " + JSON.stringify(error)
-              );
-
-              // If it's a quota error, send a fallback message
-              if (error instanceof Error && error.message.includes("quota")) {
-                console.error(
-                  "[Webhook Debug] Using fallback response due to quota error"
-                );
-                const direct_message = await sendDM(
-                  webhook_payload.entry[0].id,
-                  webhook_payload.entry[0].messaging[0].sender.id,
-                  "I apologize, but I'm currently experiencing high traffic. Please try again later or contact support.",
-                  automation.User?.integrations[0].token!
-                );
-
-                if (direct_message.status === 200) {
-                  return NextResponse.json(
-                    {
-                      message: "Fallback message sent",
-                    },
-                    { status: 200 }
-                  );
-                }
-              }
-
-              throw error;
-            }
-          } else if (
-            automation.listener &&
-            automation.listener.listener === "MESSAGE"
-          ) {
-            // Handle regular message automation
-            console.error("[Webhook Debug] Sending regular automated message");
-            try {
-              const direct_message = await sendDM(
-                webhook_payload.entry[0].id,
-                webhook_payload.entry[0].messaging[0].sender.id,
-                automation.listener.prompt,
-                automation.User?.integrations[0].token!
-              );
-
-              if (direct_message.status === 200) {
-                const tracked = await trackResponses(automation.id, "DM");
-                return NextResponse.json(
-                  { message: "Automated message sent" },
-                  { status: 200 }
-                );
-              }
-
-              return NextResponse.json(
-                { message: "Failed to send automated message" },
-                { status: 500 }
-              );
-            } catch (error) {
-              console.error("[Webhook Error] Regular message error:", error);
-              throw error;
-            }
+            return await handleSmartAIResponse(webhook_payload, automation);
+          } 
+          // Handle regular message responses
+          else if (automation.listener && automation.listener.listener === "MESSAGE") {
+            return await handleRegularMessage(webhook_payload, automation);
           }
         }
-      } else if (webhook_payload.entry[0].changes) {
-        // Handle comment automations
-        const automation = await getKeywordAutomation(
-          matcher.automationId,
-          false
-        );
-
+      }
+    }
+    
+    // Handle comments
+    if (webhook_payload.entry[0].changes) {
+      matcher = await matchKeyword(
+        webhook_payload.entry[0].changes[0].value.text
+      );
+      
+      if (matcher && matcher.automationId) {
+        const automation = await getKeywordAutomation(matcher.automationId, false);
+        
         if (automation && automation.trigger) {
-          if (
-            automation.listener &&
-            automation.listener.listener === "MESSAGE"
-          ) {
-            console.error("[Webhook Debug] Sending automated comment reply");
+          const commentId = webhook_payload.entry[0].changes[0].value.id;
+          const parentId = webhook_payload.entry[0].changes[0].value.parent_id;
+          
+          // Only process if it's a new parent comment and hasn't been processed
+          if (!parentId && !(await isCommentProcessed(commentId))) {
             try {
-              // Check if we've already responded to this comment
-              const commentId = webhook_payload.entry[0].changes[0].value.id;
-              const parentId =
-                webhook_payload.entry[0].changes[0].value.parent_id;
-
-              // Only respond if this is a new parent comment (not a reply)
-              if (!parentId) {
-                // Send the comment reply
-                const comment_reply = await sendPrivateMessage(
-                  webhook_payload.entry[0].id,
-                  commentId,
-                  automation.listener.commentReply ||
-                    automation.listener.prompt,
-                  automation.User?.integrations[0].token!
-                );
-
-                // Send DM to the commenter
-                const direct_message = await sendDM(
-                  webhook_payload.entry[0].id,
-                  webhook_payload.entry[0].changes[0].value.from.id,
-                  automation.listener.prompt,
-                  automation.User?.integrations[0].token!
-                );
-
-                if (
-                  comment_reply.status === 200 &&
-                  direct_message.status === 200
-                ) {
-                  // Track both responses
-                  await trackResponses(automation.id, "COMMENT");
-                  await trackResponses(automation.id, "DM");
-
-                  return NextResponse.json(
-                    { message: "Automated replies sent" },
-                    { status: 200 }
-                  );
+              // Send comment reply first
+              const comment_reply = await sendPrivateMessage(
+                webhook_payload.entry[0].id,
+                commentId,
+                automation.listener?.commentReply || automation.listener?.prompt || "",
+                automation.User?.integrations[0].token!
+              );
+              
+              if (comment_reply.status === 200) {
+                await markCommentAsProcessed(commentId);
+                await trackResponses(automation.id, "COMMENT");
+                
+                // Check if DM trigger is also enabled
+                const hasDmTrigger = automation.trigger.some(t => t.type === "DM");
+                
+                if (hasDmTrigger) {
+                  // If Smart AI is enabled, use that for DM
+                  if (
+                    automation.listener?.listener === "SMARTAI" &&
+                    automation.User?.subscription?.plan === "PRO"
+                  ) {
+                    const aiResponse = await handleSmartAIResponse(webhook_payload, automation, true);
+                    if (aiResponse.status === 200) {
+                      await trackResponses(automation.id, "DM");
+                    }
+                  } 
+                  // Otherwise send regular DM
+                  else {
+                    const direct_message = await sendDM(
+                      webhook_payload.entry[0].id,
+                      webhook_payload.entry[0].changes[0].value.from.id,
+                      automation.listener?.prompt || "",
+                      automation.User?.integrations[0].token!
+                    );
+                    
+                    if (direct_message.status === 200) {
+                      await trackResponses(automation.id, "DM");
+                    }
+                  }
                 }
-
+                
                 return NextResponse.json(
-                  { message: "Failed to send replies" },
-                  { status: 500 }
-                );
-              } else {
-                // Skip if this is a reply to another comment
-                return NextResponse.json(
-                  { message: "Skipping reply to comment" },
+                  { message: "Automated replies sent" },
                   { status: 200 }
                 );
               }
@@ -288,6 +129,12 @@ export async function POST(req: NextRequest) {
               console.error("[Webhook Error] Comment/DM reply error:", error);
               throw error;
             }
+          } else {
+            console.error("[Webhook Debug] Skipping already processed or reply comment");
+            return NextResponse.json(
+              { message: "Comment already processed or is a reply" },
+              { status: 200 }
+            );
           }
         }
       }
@@ -298,13 +145,7 @@ export async function POST(req: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
-    console.error(
-      "[Webhook Error] Main error: " +
-        (error instanceof Error ? error.message : "Unknown error")
-    );
-    console.error(
-      "[Webhook Error] Full error details: " + JSON.stringify(error)
-    );
+    console.error("[Webhook Error] Main error:", error);
     return NextResponse.json(
       {
         message: "Error processing webhook",
@@ -312,5 +153,120 @@ export async function POST(req: NextRequest) {
       },
       { status: 500 }
     );
+  }
+}
+
+// Helper function to handle Smart AI responses
+async function handleSmartAIResponse(webhook_payload: any, automation: any, isCommentDM: boolean = false) {
+  try {
+    const senderId = isCommentDM 
+      ? webhook_payload.entry[0].changes[0].value.from.id
+      : webhook_payload.entry[0].messaging[0].sender.id;
+    
+    const recipientId = isCommentDM
+      ? webhook_payload.entry[0].id
+      : webhook_payload.entry[0].messaging[0].recipient.id;
+    
+    const messageText = isCommentDM
+      ? webhook_payload.entry[0].changes[0].value.text
+      : webhook_payload.entry[0].messaging[0].message.text;
+
+    const customer_history = await getChatHistory(senderId, recipientId);
+
+    // Convert chat history to Gemini format
+    const messageHistory = customer_history?.history.map(msg => ({
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      text: msg.content
+    }));
+
+    // Generate response using Gemini
+    const context = `This is an Instagram ${isCommentDM ? 'comment' : 'DM'} conversation.`;
+    const smart_ai_response = await generateResponse(
+      messageText,
+      context,
+      messageHistory
+    );
+
+    if (smart_ai_response.text) {
+      const reciever = createChatHistory(
+        automation.id,
+        senderId,
+        recipientId,
+        messageText
+      );
+
+      const sender = createChatHistory(
+        automation.id,
+        recipientId,
+        senderId,
+        smart_ai_response.text
+      );
+
+      await client.$transaction([reciever, sender]);
+
+      const direct_message = await sendDM(
+        webhook_payload.entry[0].id,
+        senderId,
+        smart_ai_response.text,
+        automation.User?.integrations[0].token!
+      );
+
+      if (direct_message.status === 200) {
+        await trackResponses(automation.id, "DM");
+        return NextResponse.json(
+          { message: "Message sent" },
+          { status: 200 }
+        );
+      }
+    }
+
+    return NextResponse.json(
+      { message: "Failed to generate or send message" },
+      { status: 500 }
+    );
+  } catch (error) {
+    console.error("[Webhook Error] Smart AI response error:", error);
+    const direct_message = await sendDM(
+      webhook_payload.entry[0].id,
+      isCommentDM ? webhook_payload.entry[0].changes[0].value.from.id : webhook_payload.entry[0].messaging[0].sender.id,
+      "I apologize, but I'm currently experiencing technical difficulties. Please try again later or contact support.",
+      automation.User?.integrations[0].token!
+    );
+
+    if (direct_message.status === 200) {
+      return NextResponse.json(
+        { message: "Fallback message sent" },
+        { status: 200 }
+      );
+    }
+    throw error;
+  }
+}
+
+// Helper function to handle regular message responses
+async function handleRegularMessage(webhook_payload: any, automation: any) {
+  try {
+    const direct_message = await sendDM(
+      webhook_payload.entry[0].id,
+      webhook_payload.entry[0].messaging[0].sender.id,
+      automation.listener?.prompt || "",
+      automation.User?.integrations[0].token!
+    );
+
+    if (direct_message.status === 200) {
+      await trackResponses(automation.id, "DM");
+      return NextResponse.json(
+        { message: "Automated message sent" },
+        { status: 200 }
+      );
+    }
+
+    return NextResponse.json(
+      { message: "Failed to send automated message" },
+      { status: 500 }
+    );
+  } catch (error) {
+    console.error("[Webhook Error] Regular message error:", error);
+    throw error;
   }
 }

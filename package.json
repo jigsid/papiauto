@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^6.4.0",
+    "@google/generative-ai": "^0.21.0",
     "@hookform/resolvers": "^3.9.1",
     "@paypal/checkout-server-sdk": "^1.0.3",
     "@paypal/react-paypal-js": "^8.7.0",

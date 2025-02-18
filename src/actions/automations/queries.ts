@@ -31,6 +31,7 @@ export const getAutomations = async (clerkId: string) => {
         include: {
           keywords: true,
           listener: true,
+          dms: true,
         },
       },
     },
@@ -47,6 +48,7 @@ export const findAutomation = async (id: string) => {
       trigger: true,
       posts: true,
       listener: true,
+      dms: true,
       User: {
         select: {
           subscription: true,
@@ -96,29 +98,24 @@ export const addListener = async (
 };
 
 export const addTrigger = async (automationId: string, trigger: string[]) => {
-  if (trigger.length === 2) {
-    return await client.automation.update({
-      where: { id: automationId },
-      data: {
-        trigger: {
-          createMany: {
-            data: [{ type: trigger[0] }, { type: trigger[1] }],
-          },
-        },
-      },
-    });
-  }
+  // First, remove existing triggers
+  await client.trigger.deleteMany({
+    where: { automationId }
+  });
+
+  // Then add new triggers
   return await client.automation.update({
-    where: {
-      id: automationId,
-    },
+    where: { id: automationId },
     data: {
       trigger: {
-        create: {
-          type: trigger[0],
-        },
-      },
+        createMany: {
+          data: trigger.map(type => ({ type }))
+        }
+      }
     },
+    include: {
+      trigger: true
+    }
   });
 };
 
@@ -144,7 +141,7 @@ export const deleteKeywordQuery = async (id: string) => {
 };
 
 export const addPost = async (
-  autmationId: string,
+  automationId: string,
   posts: {
     postid: string;
     caption?: string;
@@ -154,7 +151,7 @@ export const addPost = async (
 ) => {
   return await client.automation.update({
     where: {
-      id: autmationId,
+      id: automationId,
     },
     data: {
       posts: {
@@ -162,6 +159,33 @@ export const addPost = async (
           data: posts,
         },
       },
+    },
+  });
+};
+
+export const saveDm = async (
+  automationId: string,
+  data: {
+    senderId: string;
+    receiverId: string;
+    message: string;
+  }
+) => {
+  return await client.automation.update({
+    where: {
+      id: automationId,
+    },
+    data: {
+      dms: {
+        create: {
+          senderId: data.senderId,
+          reciever: data.receiverId,
+          message: data.message,
+        },
+      },
+    },
+    include: {
+      dms: true,
     },
   });
 };
@@ -184,8 +208,44 @@ export const deleteAutomation = async (id: string) => {
     where: { automationId: id },
   });
 
+  await client.dms.deleteMany({
+    where: { automationId: id },
+  });
+
   // Then delete the automation itself
   return await client.automation.delete({
     where: { id },
   });
+};
+
+// Add this new type
+interface ProcessedComment {
+  id: string;
+  automationId: string;
+  commentId: string;
+  processed: boolean;
+  createdAt: Date;
+}
+
+// Add this new query
+export const markCommentAsProcessed = async (automationId: string, commentId: string) => {
+  return await client.processedComment.create({
+    data: {
+      automationId,
+      commentId,
+      processed: true
+    }
+  });
+};
+
+export const isCommentProcessed = async (automationId: string, commentId: string) => {
+  const result = await client.processedComment.findUnique({
+    where: {
+      automationId_commentId: {
+        automationId,
+        commentId
+      }
+    }
+  });
+  return !!result;
 };

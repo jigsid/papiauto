@@ -1,5 +1,6 @@
 "use server";
 
+import { generateResponse } from "@/lib/gemini";
 import { onCurrentUser } from "../user";
 import { findUser } from "../user/queries";
 import {
@@ -13,6 +14,7 @@ import {
   findAutomation,
   getAutomations,
   updateAutomation,
+  saveDm,
 } from "./queries";
 
 export const createAutomations = async (id?: string) => {
@@ -71,14 +73,14 @@ export const updateAutomationName = async (
 };
 
 export const saveListener = async (
-  autmationId: string,
+  automationId: string,
   listener: "SMARTAI" | "MESSAGE",
   prompt: string,
   reply?: string
 ) => {
   await onCurrentUser();
   try {
-    const create = await addListener(autmationId, listener, prompt, reply);
+    const create = await addListener(automationId, listener, prompt, reply);
     if (create) return { status: 200, data: "Listener created" };
     return { status: 404, data: "Cant save listener" };
   } catch (error) {
@@ -143,7 +145,7 @@ export const getProfilePosts = async () => {
 };
 
 export const savePosts = async (
-  autmationId: string,
+  automationId: string,
   posts: {
     postid: string;
     caption?: string;
@@ -153,7 +155,7 @@ export const savePosts = async (
 ) => {
   await onCurrentUser();
   try {
-    const create = await addPost(autmationId, posts);
+    const create = await addPost(automationId, posts);
 
     if (create) return { status: 200, data: "Posts attached" };
 
@@ -187,6 +189,63 @@ export const deleteAutomation = async (id: string) => {
     }
     return { status: 404, data: "Automation not found" };
   } catch (error) {
+    return { status: 500, data: "Oops! something went wrong" };
+  }
+};
+
+// New functions for handling DMs and AI responses
+
+export const handleDirectMessage = async (
+  automationId: string,
+  senderId: string,
+  receiverId: string,
+  message: string,
+  isAiResponse: boolean = false
+) => {
+  await onCurrentUser();
+  try {
+    const automation = await findAutomation(automationId);
+    if (!automation) {
+      return { status: 404, data: "Automation not found" };
+    }
+
+    let responseMessage = message;
+
+    if (isAiResponse && automation.listener?.listener === "SMARTAI") {
+      // Get context from previous messages and user profile
+      const context = `This is an Instagram DM conversation. Previous message: ${message}`;
+      
+      // Generate AI response
+      const aiResponse = await generateResponse(
+        automation.listener.prompt,
+        context
+      );
+
+      if (aiResponse.error) {
+        return { status: 500, data: aiResponse.error };
+      }
+
+      responseMessage = aiResponse.text;
+    }
+
+    // Save the DM
+    const savedDm = await saveDm(automationId, {
+      senderId,
+      receiverId,
+      message: responseMessage,
+    });
+
+    if (savedDm) {
+      return { 
+        status: 200, 
+        data: "Message sent successfully",
+        response: responseMessage 
+      };
+    }
+
+    return { status: 404, data: "Failed to send message" };
+  } catch (error) {
+    console.error("Error handling direct message:", error);
     return { status: 500, data: "Oops! something went wrong" };
   }
 };
