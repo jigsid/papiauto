@@ -173,9 +173,9 @@ async function handleSmartAIResponse(webhook_payload: any, automation: any, isCo
 
     const customer_history = await getChatHistory(senderId, recipientId);
 
-    // Convert chat history to Gemini format
+    // Convert chat history to Gemini format with proper type assertion
     const messageHistory = customer_history?.history.map(msg => ({
-      role: msg.role === 'assistant' ? 'model' : 'user',
+      role: (msg.role === 'assistant' ? 'model' : 'user') as 'model' | 'user',
       text: msg.content
     }));
 
