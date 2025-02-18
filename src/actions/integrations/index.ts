@@ -49,17 +49,31 @@ export const onIntegrate = async (code: string) => {
           new Date(expire_date),
           insta_id.data.user_id
         );
-        return { status: 200, data: create };
+        // Return user data with the integration
+        return { 
+          status: 200, 
+          data: {
+            firstname: user.firstName,
+            lastname: user.lastName
+          }
+        };
       } 
       // If integration exists, update it
       else {
         const existingIntegration = integration.integrations[0];
-        const update = await updateIntegration(
+        await updateIntegration(
           token.access_token,
           new Date(expire_date),
           existingIntegration.id
         );
-        return { status: 200, data: update };
+        // Return user data with the integration
+        return { 
+          status: 200, 
+          data: {
+            firstname: user.firstName,
+            lastname: user.lastName
+          }
+        };
       }
     } catch (apiError) {
       console.error("🔴 500 - Instagram API Error:", apiError);
