@@ -1,7 +1,7 @@
 "use server";
 
 import { onCurrentUser } from "../user";
-import { createIntegration, getIntegration } from "./queries";
+import { createIntegration, getIntegration, updateIntegration } from "./queries";
 import { generateTokens } from "@/lib/fetch";
 import axios from "axios";
 
@@ -19,18 +19,30 @@ export const onIntegrate = async (code: string) => {
 
   try {
     const integration = await getIntegration(user.id);
+    
+    // Generate Instagram tokens
+    const token = await generateTokens(code);
+    if (!token || !token.access_token) {
+      console.error("🔴 401 - Failed to generate valid token");
+      return { status: 401, error: "Failed to generate Instagram access token" };
+    }
 
-    if (integration && integration.integrations.length === 0) {
-      const token = await generateTokens(code);
-      console.log(token);
+    try {
+      // Get Instagram user ID
+      const insta_id = await axios.get(
+        `${process.env.INSTAGRAM_BASE_URL}/me?fields=user_id&access_token=${token.access_token}`
+      );
 
-      if (token) {
-        const insta_id = await axios.get(
-          `${process.env.INSTAGRAM_BASE_URL}/me?fields=user_id&access_token=${token.access_token}`
-        );
+      if (!insta_id.data || !insta_id.data.user_id) {
+        console.error("🔴 401 - Failed to get Instagram user ID");
+        return { status: 401, error: "Failed to get Instagram user ID" };
+      }
 
-        const today = new Date();
-        const expire_date = today.setDate(today.getDate() + 60);
+      const today = new Date();
+      const expire_date = today.setDate(today.getDate() + 60);
+
+      // If no integrations exist, create new one
+      if (!integration || !integration.integrations || integration.integrations.length === 0) {
         const create = await createIntegration(
           user.id,
           token.access_token,
@@ -38,14 +50,23 @@ export const onIntegrate = async (code: string) => {
           insta_id.data.user_id
         );
         return { status: 200, data: create };
+      } 
+      // If integration exists, update it
+      else {
+        const existingIntegration = integration.integrations[0];
+        const update = await updateIntegration(
+          token.access_token,
+          new Date(expire_date),
+          existingIntegration.id
+        );
+        return { status: 200, data: update };
       }
-      console.log("🔴 401");
-      return { status: 401 };
+    } catch (apiError) {
+      console.error("🔴 500 - Instagram API Error:", apiError);
+      return { status: 500, error: "Failed to communicate with Instagram API" };
     }
-    console.log("🔴 404");
-    return { status: 404 };
   } catch (error) {
-    console.log("🔴 500", error);
-    return { status: 500 };
+    console.error("🔴 500 - Integration Error:", error);
+    return { status: 500, error: "Internal server error" };
   }
 };

@@ -2,8 +2,8 @@
 import { onOAuthInstagram } from "@/actions/integrations";
 import { onUserInfo } from "@/actions/user";
 import { Button } from "@/components/ui/button";
-import { useQuery } from "@tanstack/react-query";
-import React from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import React, { useEffect } from "react";
 
 type Props = {
   title: string;
@@ -13,6 +13,8 @@ type Props = {
 };
 
 const IntegrationCard = ({ description, icon, strategy, title }: Props) => {
+  const queryClient = useQueryClient();
+
   const onInstaOAuth = async () => {
     if (strategy === "INSTAGRAM") {
       const url = await onOAuthInstagram(strategy);
@@ -22,9 +24,21 @@ const IntegrationCard = ({ description, icon, strategy, title }: Props) => {
     }
   };
 
-  const { data } = useQuery({
+  // Listen for focus events to refresh connection status
+  useEffect(() => {
+    const onFocus = () => {
+      queryClient.invalidateQueries({ queryKey: ["user-profile"] });
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [queryClient]);
+
+  const { data, refetch } = useQuery({
     queryKey: ["user-profile"],
     queryFn: onUserInfo,
+    // Refresh every 5 seconds while window is focused
+    refetchInterval: 5000,
+    refetchIntervalInBackground: false,
   });
 
   const integrated = data?.data?.integrations.find(
@@ -39,7 +53,7 @@ const IntegrationCard = ({ description, icon, strategy, title }: Props) => {
         <p className="text-[#9D9D9D] text-base ">{description}</p>
       </div>
       <Button
-        onClick={onInstaOAuth}
+        onClick={integrated ? () => refetch() : onInstaOAuth}
         disabled={integrated?.name === strategy}
         className="bg-gradient-to-br text-white rounded-full text-lg from-[#3352CC] font-medium to-[#1C2D70] hover:opacity-70 transition duration-100"
       >
