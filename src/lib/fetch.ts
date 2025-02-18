@@ -65,11 +65,16 @@ export const generateTokens = async (code: string) => {
       process.env.INSTAGRAM_CLIENT_SECRET as string
     );
     params.append("grant_type", "authorization_code");
-    params.append(
-      "redirect_uri",
-      `${process.env.NEXT_PUBLIC_HOST_URL}/callback/instagram`
-    );
+    // Remove trailing slash to match exactly with Facebook app settings
+    const redirectUri = `${process.env.NEXT_PUBLIC_HOST_URL}callback/instagram`.replace(/\/+$/, '');
+    params.append("redirect_uri", redirectUri);
     params.append("code", code);
+
+    console.log("Sending token request with params:", {
+      client_id: process.env.INSTAGRAM_CLIENT_ID,
+      redirect_uri: redirectUri,
+      code: code
+    });
 
     const shortTokenRes = await fetch(process.env.INSTAGRAM_TOKEN_URL as string, {
       method: "POST",
@@ -80,6 +85,9 @@ export const generateTokens = async (code: string) => {
     });
 
     const token = await shortTokenRes.json();
+    
+    // Log the token response for debugging
+    console.log("Short token response:", token);
     
     // Check if we got an access token
     if (!token.access_token) {
