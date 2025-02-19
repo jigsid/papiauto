@@ -1,10 +1,10 @@
 "use server";
 
-import { client } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { v4 } from "uuid";
 
 export const createAutomation = async (clerkId: string, id?: string) => {
-  return await client.user.update({
+  return await prisma.user.update({
     where: {
       clerkId,
     },
@@ -19,7 +19,7 @@ export const createAutomation = async (clerkId: string, id?: string) => {
 };
 
 export const getAutomations = async (clerkId: string) => {
-  return await client.user.findUnique({
+  return await prisma.user.findUnique({
     where: {
       clerkId,
     },
@@ -39,7 +39,7 @@ export const getAutomations = async (clerkId: string) => {
 };
 
 export const findAutomation = async (id: string) => {
-  return await client.automation.findUnique({
+  return await prisma.automation.findUnique({
     where: {
       id,
     },
@@ -66,7 +66,7 @@ export const updateAutomation = async (
     active?: boolean;
   }
 ) => {
-  return await client.automation.update({
+  return await prisma.automation.update({
     where: { id },
     data: {
       name: update.name,
@@ -81,7 +81,7 @@ export const addListener = async (
   prompt: string,
   reply?: string
 ) => {
-  return await client.automation.update({
+  return await prisma.automation.update({
     where: {
       id: automationId,
     },
@@ -99,12 +99,12 @@ export const addListener = async (
 
 export const addTrigger = async (automationId: string, trigger: string[]) => {
   // First, remove existing triggers
-  await client.trigger.deleteMany({
+  await prisma.trigger.deleteMany({
     where: { automationId }
   });
 
   // Then add new triggers
-  return await client.automation.update({
+  return await prisma.automation.update({
     where: { id: automationId },
     data: {
       trigger: {
@@ -120,7 +120,7 @@ export const addTrigger = async (automationId: string, trigger: string[]) => {
 };
 
 export const addKeyWord = async (automationId: string, keyword: string) => {
-  return client.automation.update({
+  return prisma.automation.update({
     where: {
       id: automationId,
     },
@@ -135,7 +135,7 @@ export const addKeyWord = async (automationId: string, keyword: string) => {
 };
 
 export const deleteKeywordQuery = async (id: string) => {
-  return client.keyword.delete({
+  return prisma.keyword.delete({
     where: { id },
   });
 };
@@ -149,7 +149,7 @@ export const addPost = async (
     mediaType: "IMAGE" | "VIDEO" | "CAROSEL_ALBUM";
   }[]
 ) => {
-  return await client.automation.update({
+  return await prisma.automation.update({
     where: {
       id: automationId,
     },
@@ -171,7 +171,7 @@ export const saveDm = async (
     message: string;
   }
 ) => {
-  return await client.automation.update({
+  return await prisma.automation.update({
     where: {
       id: automationId,
     },
@@ -192,28 +192,28 @@ export const saveDm = async (
 
 export const deleteAutomation = async (id: string) => {
   // First delete all related records
-  await client.keyword.deleteMany({
+  await prisma.keyword.deleteMany({
     where: { automationId: id },
   });
 
-  await client.trigger.deleteMany({
+  await prisma.trigger.deleteMany({
     where: { automationId: id },
   });
 
-  await client.post.deleteMany({
+  await prisma.post.deleteMany({
     where: { automationId: id },
   });
 
-  await client.listener.deleteMany({
+  await prisma.listener.deleteMany({
     where: { automationId: id },
   });
 
-  await client.dms.deleteMany({
+  await prisma.dms.deleteMany({
     where: { automationId: id },
   });
 
   // Then delete the automation itself
-  return await client.automation.delete({
+  return await prisma.automation.delete({
     where: { id },
   });
 };
@@ -229,7 +229,7 @@ interface ProcessedComment {
 
 // Add this new query
 export const markCommentAsProcessed = async (automationId: string, commentId: string) => {
-  return await client.processedComment.create({
+  return await prisma.processedComment.create({
     data: {
       automationId,
       commentId,
@@ -239,7 +239,7 @@ export const markCommentAsProcessed = async (automationId: string, commentId: st
 };
 
 export const isCommentProcessed = async (automationId: string, commentId: string) => {
-  const result = await client.processedComment.findUnique({
+  const result = await prisma.processedComment.findUnique({
     where: {
       automationId_commentId: {
         automationId,

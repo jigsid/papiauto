@@ -1,13 +1,13 @@
 'use server'
 
-import { client } from '@/lib/prisma'
+import { prisma } from '@/lib/prisma'
 
 export const updateIntegration = async (
   token: string,
   expire: Date,
   id: string
 ) => {
-  return await client.integrations.update({
+  return await prisma.integrations.update({
     where: { id },
     data: {
       token,
@@ -17,7 +17,7 @@ export const updateIntegration = async (
 }
 
 export const getIntegration = async (clerkId: string) => {
-  return await client.user.findUnique({
+  return await prisma.user.findUnique({
     where: {
       clerkId,
     },
@@ -37,7 +37,7 @@ export const createIntegration = async (
   expire: Date,
   igId?: string
 ) => {
-  return await client.user.update({
+  return await prisma.user.update({
     where: {
       clerkId,
     },

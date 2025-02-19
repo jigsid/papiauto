@@ -16,6 +16,7 @@ import {
   updateAutomation,
   saveDm,
 } from "./queries";
+import { contextProcessor } from "@/lib/context-processor";
 
 export const createAutomations = async (id?: string) => {
   const user = await onCurrentUser();
@@ -195,6 +196,47 @@ export const deleteAutomation = async (id: string) => {
 
 // New functions for handling DMs and AI responses
 
+export const handleMessage = async (
+  userId: string,
+  messageType: 'COMMENT' | 'DM' | 'SYSTEM',
+  content: string,
+  metadata?: Record<string, any>
+) => {
+  await onCurrentUser();
+  try {
+    const responses = await contextProcessor.processMessage({
+      userId,
+      messageType,
+      content,
+      metadata
+    });
+
+    // Handle responses
+    for (const response of responses) {
+      if (response.type === 'DM') {
+        await saveDm(response.automationId, {
+          senderId: userId,
+          receiverId: userId,
+          message: response.response
+        });
+      } else {
+        // Handle comment responses
+        // This would integrate with your Instagram API to post comments
+        console.log('Posting comment:', response.response);
+      }
+    }
+
+    return {
+      status: 200,
+      data: "Messages processed successfully",
+      responses
+    };
+  } catch (error) {
+    console.error("Error processing message:", error);
+    return { status: 500, data: "Oops! something went wrong" };
+  }
+};
+
 export const handleDirectMessage = async (
   automationId: string,
   senderId: string,
@@ -204,6 +246,37 @@ export const handleDirectMessage = async (
 ) => {
   await onCurrentUser();
   try {
+    const responses = await contextProcessor.processMessage({
+      userId: senderId,
+      automationId,
+      messageType: 'DM',
+      content: message,
+      metadata: {
+        receiverId,
+        isAiResponse
+      }
+    });
+
+    // If we got responses, use those. Otherwise, fall back to the original behavior
+    if (responses.length > 0) {
+      const savedMessages = await Promise.all(
+        responses.map(response =>
+          saveDm(response.automationId, {
+            senderId,
+            receiverId,
+            message: response.response
+          })
+        )
+      );
+
+      return {
+        status: 200,
+        data: "Messages sent successfully",
+        responses: savedMessages
+      };
+    }
+
+    // Original fallback behavior
     const automation = await findAutomation(automationId);
     if (!automation) {
       return { status: 404, data: "Automation not found" };
@@ -212,10 +285,7 @@ export const handleDirectMessage = async (
     let responseMessage = message;
 
     if (isAiResponse && automation.listener?.listener === "SMARTAI") {
-      // Get context from previous messages and user profile
       const context = `This is an Instagram DM conversation. Previous message: ${message}`;
-      
-      // Generate AI response
       const aiResponse = await generateResponse(
         automation.listener.prompt,
         context
@@ -228,7 +298,6 @@ export const handleDirectMessage = async (
       responseMessage = aiResponse.text;
     }
 
-    // Save the DM
     const savedDm = await saveDm(automationId, {
       senderId,
       receiverId,
@@ -236,10 +305,10 @@ export const handleDirectMessage = async (
     });
 
     if (savedDm) {
-      return { 
-        status: 200, 
+      return {
+        status: 200,
         data: "Message sent successfully",
-        response: responseMessage 
+        response: responseMessage
       };
     }
 

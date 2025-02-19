@@ -1,47 +1,51 @@
 'use server'
 
-import { client } from '@/lib/prisma'
+import { prisma } from '@/lib/prisma'
 
 export const findUser = async (clerkId: string) => {
-  return await client.user.findUnique({
+  return await prisma.user.findUnique({
     where: {
       clerkId,
     },
     include: {
       subscription: true,
-      integrations: {
-        select: {
-          id: true,
-          token: true,
-          expiresAt: true,
-          name: true,
-        },
-      },
+      integrations: true,
     },
   })
 }
 
 export const createUser = async (
   clerkId: string,
-  firstname: string,
-  lastname: string,
-  email: string
+  email: string,
+  firstname?: string,
+  lastname?: string
 ) => {
-  return await client.user.create({
+  return await prisma.user.create({
     data: {
       clerkId,
+      email,
       firstname,
       lastname,
-      email,
       subscription: {
         create: {
           plan: 'PRO'
         },
       },
     },
-    select: {
-      firstname: true,
-      lastname: true,
+  })
+}
+
+export const updateUser = async (
+  clerkId: string,
+  data: {
+    firstname?: string
+    lastname?: string
+  }
+) => {
+  return await prisma.user.update({
+    where: {
+      clerkId,
     },
+    data,
   })
 }

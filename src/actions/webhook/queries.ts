@@ -1,7 +1,7 @@
-import { client } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 export const matchKeyword = async (keyword: string) => {
-  return await client.keyword.findFirst({
+  return await prisma.keyword.findFirst({
     where: {
       word: {
         equals: keyword,
@@ -15,7 +15,7 @@ export const getKeywordAutomation = async (
   automationId: string,
   dm: boolean
 ) => {
-  return await client.automation.findUnique({
+  return await prisma.automation.findUnique({
     where: {
       id: automationId,
     },
@@ -50,7 +50,7 @@ export const trackResponses = async (
   type: "COMMENT" | "DM"
 ) => {
   if (type === "COMMENT") {
-    return await client.listener.update({
+    return await prisma.listener.update({
       where: { automationId },
       data: {
         commentCount: {
@@ -61,7 +61,7 @@ export const trackResponses = async (
   }
 
   if (type === "DM") {
-    return await client.listener.update({
+    return await prisma.listener.update({
       where: { automationId },
       data: {
         dmCount: {
@@ -78,7 +78,7 @@ export const createChatHistory = (
   reciever: string,
   message: string
 ) => {
-  return client.automation.update({
+  return prisma.automation.update({
     where: {
       id: automationId,
     },
@@ -95,7 +95,7 @@ export const createChatHistory = (
 };
 
 export const getKeywordPost = async (postId: string, automationId: string) => {
-  return await client.post.findFirst({
+  return await prisma.post.findFirst({
     where: {
       AND: [{ postid: postId }, { automationId }],
     },
@@ -104,7 +104,7 @@ export const getKeywordPost = async (postId: string, automationId: string) => {
 };
 
 export const getChatHistory = async (sender: string, reciever: string) => {
-  const history = await client.dms.findMany({
+  const history = await prisma.dms.findMany({
     where: {
       AND: [{ senderId: sender }, { reciever }],
     },

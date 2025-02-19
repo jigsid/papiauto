@@ -23,6 +23,8 @@ model User {
   subscription Subscription?
   integrations Integrations[]
   automations  Automation[]
+  conversationHistory ConversationHistory[]
+  contextMemory      ContextMemory[]
 }
 
 model Subscription {
@@ -58,6 +60,9 @@ model Automation {
   userId           String?           @db.Uuid
   keywords         Keyword[]
   processedComments ProcessedComment[]
+  conversationHistory ConversationHistory[]
+  contextRules       Json?               @db.JsonB
+  triggerRules      Json?               @db.JsonB
 }
 
 model Dms {
@@ -118,6 +123,32 @@ model ProcessedComment {
   @@unique([automationId, commentId])
 }
 
+model ConversationHistory {
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String      @db.Uuid
+  User         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messageType  MessageType @default(COMMENT)
+  content      String
+  metadata     Json?       @db.JsonB
+  context      String?
+  createdAt    DateTime    @default(now())
+  automationId String?     @db.Uuid
+  Automation   Automation? @relation(fields: [automationId], references: [id])
+}
+
+model ContextMemory {
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String      @db.Uuid
+  User         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key          String
+  value        String
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  expiresAt    DateTime?
+
+  @@unique([userId, key], name: "userId_key")
+}
+
 enum SUBSCRIPTION_PLAN {
   PRO
   FREE
@@ -136,4 +167,10 @@ enum MEDIATYPE {
 enum LISTENERS {
   SMARTAI
   MESSAGE
+}
+
+enum MessageType {
+  COMMENT
+  DM
+  SYSTEM
 }

@@ -9,7 +9,7 @@ import {
 } from "@/actions/webhook/queries";
 import { sendDM, sendPrivateMessage } from "@/lib/fetch";
 import { generateResponse } from "@/lib/gemini";
-import { client } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
 // Track processed comments in memory for now since we can't use the database
@@ -202,7 +202,7 @@ async function handleSmartAIResponse(webhook_payload: any, automation: any, isCo
         smart_ai_response.text
       );
 
-      await client.$transaction([reciever, sender]);
+      await prisma.$transaction([reciever, sender]);
 
       const direct_message = await sendDM(
         webhook_payload.entry[0].id,
