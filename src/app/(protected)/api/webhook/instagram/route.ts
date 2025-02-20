@@ -31,6 +31,7 @@ interface ChatHistory {
 const activeConversations = new Map<string, {
   messageCount: number;
   lastKeywordTrigger: number;
+  limitNotificationSent: boolean;  // Track if we've sent the limit notification
 }>();
 
 async function isCommentProcessed(commentId: string) {
@@ -82,20 +83,32 @@ function isConversationActive(senderId: string): boolean {
 }
 
 // Helper function to increment message count
-function incrementMessageCount(senderId: string) {
+function incrementMessageCount(senderId: string): boolean {
   const conversation = activeConversations.get(senderId);
   if (conversation) {
     conversation.messageCount += 1;
     activeConversations.set(senderId, conversation);
+    return conversation.messageCount >= 3 && !conversation.limitNotificationSent;
   }
+  return false;
 }
 
 // Helper function to reset conversation
 function resetConversation(senderId: string) {
   activeConversations.set(senderId, {
     messageCount: 0,
-    lastKeywordTrigger: Date.now()
+    lastKeywordTrigger: Date.now(),
+    limitNotificationSent: false
   });
+}
+
+// Helper function to mark limit notification as sent
+function markLimitNotificationSent(senderId: string) {
+  const conversation = activeConversations.get(senderId);
+  if (conversation) {
+    conversation.limitNotificationSent = true;
+    activeConversations.set(senderId, conversation);
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -421,10 +434,23 @@ async function handleSmartAIResponse(webhook_payload: any, automation: any, isCo
     context += `\nCurrent message: ${messageText}`;
 
     // Generate AI response
-    const aiResponse = await generateResponse(
-      automation.listener.prompt,
-      context
-    );
+    let aiResponse;
+    try {
+      aiResponse = await generateResponse(
+        automation.listener.prompt,
+        context
+      );
+    } catch (error) {
+      console.error("[Webhook Debug] AI generation error:", error);
+      // Send a more specific error message
+      return NextResponse.json(
+        { 
+          message: "Failed to generate AI response",
+          error: error instanceof Error ? error.message : "Unknown error"
+        },
+        { status: 500 }
+      );
+    }
 
     if (!aiResponse || aiResponse.error) {
       console.error("[Webhook Debug] Failed to generate AI response:", aiResponse?.error);
@@ -460,6 +486,23 @@ async function handleSmartAIResponse(webhook_payload: any, automation: any, isCo
 
       if (direct_message.status === 200) {
         await trackResponses(automation.id, "DM");
+        
+        // Check if we need to send limit notification
+        const shouldSendLimitNotification = incrementMessageCount(senderId);
+        if (shouldSendLimitNotification) {
+          try {
+            await sendDM(
+              recipientId,
+              senderId,
+              "You've reached the message limit. Please trigger the keyword again to continue our conversation.",
+              automation.User?.integrations[0].token!
+            );
+            markLimitNotificationSent(senderId);
+          } catch (error) {
+            console.error("[Webhook Error] Failed to send limit notification:", error);
+          }
+        }
+        
         return NextResponse.json(
           { message: "Message sent" },
           { status: 200 }
