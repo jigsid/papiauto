@@ -21,6 +21,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, ReactNode } from "react";
+import ChatbotIframe from "./chatbotiframe";
 
 interface FloatingElementProps {
   children: ReactNode;
@@ -388,6 +389,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+      <ChatbotIframe />
     </main>
   );
 }
