@@ -110,18 +110,36 @@ export async function POST(req: NextRequest) {
           const commentId = webhook_payload.entry[0].changes[0].value.id;
           const parentId = webhook_payload.entry[0].changes[0].value.parent_id;
           
-          // Only process if it's a new parent comment and hasn't been processed
-          if (!parentId && !(await isCommentProcessed(commentId))) {
-            try {
-              // Send comment reply first
-              const comment_reply = await sendPrivateMessage(
-                webhook_payload.entry[0].id,
-                commentId,
-                automation.listener?.commentReply || automation.listener?.prompt || "",
-                automation.User?.integrations[0].token!
+          // Skip if it's a reply comment
+          if (parentId) {
+            console.error("[Webhook Debug] Skipping reply comment");
+            return NextResponse.json(
+              { message: "Skipping reply comment" },
+              { status: 200 }
+            );
+          }
+
+          // Check if comment is already processed
+          try {
+            const isProcessed = await isCommentProcessed(commentId);
+            if (isProcessed) {
+              console.error("[Webhook Debug] Skipping already processed comment");
+              return NextResponse.json(
+                { message: "Comment already processed" },
+                { status: 200 }
               );
-              
-              if (comment_reply.status === 200) {
+            }
+
+            // Process the comment
+            const comment_reply = await sendPrivateMessage(
+              webhook_payload.entry[0].id,
+              commentId,
+              automation.listener?.commentReply || automation.listener?.prompt || "",
+              automation.User?.integrations[0].token!
+            );
+            
+            if (comment_reply.status === 200) {
+              try {
                 // Mark comment as processed before sending DM to prevent race conditions
                 await markCommentAsProcessed(commentId, automation.id);
                 await trackResponses(automation.id, "COMMENT");
@@ -167,17 +185,21 @@ export async function POST(req: NextRequest) {
                   { message: "Automated replies sent" },
                   { status: 200 }
                 );
+              } catch (error) {
+                if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+                  // Handle duplicate comment gracefully
+                  console.error("[Webhook Debug] Comment already processed (race condition)");
+                  return NextResponse.json(
+                    { message: "Comment already processed" },
+                    { status: 200 }
+                  );
+                }
+                throw error;
               }
-            } catch (error) {
-              console.error("[Webhook Error] Comment/DM reply error:", error);
-              throw error;
             }
-          } else {
-            console.error("[Webhook Debug] Skipping already processed or reply comment");
-            return NextResponse.json(
-              { message: "Comment already processed or is a reply" },
-              { status: 200 }
-            );
+          } catch (error) {
+            console.error("[Webhook Error] Comment/DM reply error:", error);
+            throw error;
           }
         }
       }
@@ -216,17 +238,24 @@ async function handleSmartAIResponse(webhook_payload: any, automation: any, isCo
 
     const customer_history = await getChatHistory(senderId, recipientId);
 
-    // Convert chat history to Gemini format with proper type assertion
-    const messageHistory = customer_history?.history.map(msg => ({
-      role: (msg.role === 'assistant' ? 'model' : 'user') as 'model' | 'user',
-      text: msg.content
-    })) || [];
-
-    // Add current message to history for context
+    // Convert chat history to Gemini format and ensure user messages come first
+    const messageHistory: { role: 'user' | 'model'; text: string }[] = [];
+    
+    // Add current message first to ensure user message starts the conversation
     messageHistory.push({
       role: 'user',
       text: messageText
     });
+
+    // Then add historical messages if they exist
+    if (customer_history?.history?.length) {
+      customer_history.history.forEach(msg => {
+        messageHistory.push({
+          role: msg.role === 'assistant' ? 'model' : 'user',
+          text: msg.content
+        });
+      });
+    }
 
     // Generate response using Gemini
     const context = `This is an Instagram ${isCommentDM ? 'comment' : 'DM'} conversation. You are a helpful AI assistant managing this Instagram account. Keep responses concise and engaging.`;
@@ -237,35 +266,39 @@ async function handleSmartAIResponse(webhook_payload: any, automation: any, isCo
     );
 
     if (smart_ai_response.text) {
-      // Save user's message to history
-      await createChatHistory(
-        automation.id,
-        senderId,
-        recipientId,
-        messageText
-      );
-
-      // Save AI's response to history
-      await createChatHistory(
-        automation.id,
-        recipientId,
-        senderId,
-        smart_ai_response.text
-      );
-
-      const direct_message = await sendDM(
-        webhook_payload.entry[0].id,
-        senderId,
-        smart_ai_response.text,
-        automation.User?.integrations[0].token!
-      );
-
-      if (direct_message.status === 200) {
-        await trackResponses(automation.id, "DM");
-        return NextResponse.json(
-          { message: "Message sent" },
-          { status: 200 }
+      try {
+        // Save user's message to history
+        await createChatHistory(
+          automation.id,
+          senderId,
+          recipientId,
+          messageText
         );
+
+        // Save AI's response to history
+        await createChatHistory(
+          automation.id,
+          recipientId,
+          senderId,
+          smart_ai_response.text
+        );
+
+        const direct_message = await sendDM(
+          webhook_payload.entry[0].id,
+          senderId,
+          smart_ai_response.text,
+          automation.User?.integrations[0].token!
+        );
+
+        if (direct_message.status === 200) {
+          await trackResponses(automation.id, "DM");
+          return NextResponse.json(
+            { message: "Message sent" },
+            { status: 200 }
+          );
+        }
+      } catch (error) {
+        console.error("[Webhook Error] Failed to save chat history:", error);
       }
     }
 
