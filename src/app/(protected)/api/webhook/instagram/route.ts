@@ -257,69 +257,103 @@ async function handleSmartAIResponse(webhook_payload: any, automation: any, isCo
       });
     }
 
-    // Generate response using Gemini
-    const context = `This is an Instagram ${isCommentDM ? 'comment' : 'DM'} conversation. You are a helpful AI assistant managing this Instagram account. Keep responses concise and engaging.`;
-    const smart_ai_response = await generateResponse(
-      messageText,
-      context,
-      messageHistory
-    );
+    let aiResponse: string;
+    try {
+      // Generate response using Gemini
+      const context = `This is an Instagram ${isCommentDM ? 'comment' : 'DM'} conversation. You are a helpful AI assistant managing this Instagram account. Keep responses concise and engaging.`;
+      const smart_ai_response = await generateResponse(
+        messageText,
+        context,
+        messageHistory
+      );
 
-    if (smart_ai_response.text) {
+      if (!smart_ai_response.text) {
+        throw new Error("Empty response from AI");
+      }
+      
+      aiResponse = smart_ai_response.text;
+    } catch (error) {
+      console.error("[Webhook Error] AI generation error:", error);
+      // Fallback response when AI fails
+      aiResponse = "I apologize, but I'm experiencing high traffic at the moment. Please try again in a few minutes, or let me know if you need immediate assistance with something specific.";
+    }
+
+    try {
+      // Save user's message to history
+      await createChatHistory(
+        automation.id,
+        senderId,
+        recipientId,
+        messageText
+      );
+
+      // Save AI's response to history
+      await createChatHistory(
+        automation.id,
+        recipientId,
+        senderId,
+        aiResponse
+      );
+
+      // For DMs, send to the sender's ID, not the page ID
+      const direct_message = await sendDM(
+        webhook_payload.entry[0].id,  // Page ID
+        isCommentDM ? webhook_payload.entry[0].changes[0].value.from.id : webhook_payload.entry[0].messaging[0].sender.id,  // Recipient ID
+        aiResponse,
+        automation.User?.integrations[0].token!
+      );
+
+      if (direct_message.status === 200) {
+        await trackResponses(automation.id, "DM");
+        return NextResponse.json(
+          { message: "Message sent" },
+          { status: 200 }
+        );
+      }
+    } catch (error) {
+      console.error("[Webhook Error] Failed to save chat history or send message:", error);
+      // If sending fails, try one more time with a simpler message
       try {
-        // Save user's message to history
-        await createChatHistory(
-          automation.id,
-          senderId,
-          recipientId,
-          messageText
-        );
-
-        // Save AI's response to history
-        await createChatHistory(
-          automation.id,
-          recipientId,
-          senderId,
-          smart_ai_response.text
-        );
-
-        const direct_message = await sendDM(
+        const fallback_message = await sendDM(
           webhook_payload.entry[0].id,
-          senderId,
-          smart_ai_response.text,
+          isCommentDM ? webhook_payload.entry[0].changes[0].value.from.id : webhook_payload.entry[0].messaging[0].sender.id,
+          "I'm having trouble processing your message right now. Please try again shortly.",
           automation.User?.integrations[0].token!
         );
 
-        if (direct_message.status === 200) {
-          await trackResponses(automation.id, "DM");
+        if (fallback_message.status === 200) {
           return NextResponse.json(
-            { message: "Message sent" },
+            { message: "Fallback message sent" },
             { status: 200 }
           );
         }
-      } catch (error) {
-        console.error("[Webhook Error] Failed to save chat history:", error);
+      } catch (retryError) {
+        console.error("[Webhook Error] Failed to send fallback message:", retryError);
       }
     }
 
     return NextResponse.json(
-      { message: "Failed to generate or send message" },
+      { message: "Failed to process message" },
       { status: 500 }
     );
   } catch (error) {
     console.error("[Webhook Error] Smart AI response error:", error);
-    const direct_message = await sendDM(
-      webhook_payload.entry[0].id,
-      isCommentDM ? webhook_payload.entry[0].changes[0].value.from.id : webhook_payload.entry[0].messaging[0].sender.id,
-      "I apologize, but I'm currently experiencing technical difficulties. Please try again later or contact support.",
-      automation.User?.integrations[0].token!
-    );
-
-    if (direct_message.status === 200) {
-      return NextResponse.json(
-        { message: "Fallback message sent" },
-        { status: 200 }
+    try {
+      const direct_message = await sendDM(
+        webhook_payload.entry[0].id,
+        isCommentDM ? webhook_payload.entry[0].changes[0].value.from.id : webhook_payload.entry[0].messaging[0].sender.id,
+        "I apologize, but I'm currently experiencing technical difficulties. Please try again later or contact support.",
+        automation.User?.integrations[0].token!
       );
+
+      if (direct_message.status === 200) {
+        return NextResponse.json(
+          { message: "Fallback message sent" },
+          { status: 200 }
+        );
+      }
+    } catch (sendError) {
+      console.error("[Webhook Error] Failed to send error message:", sendError);
     }
     throw error;
   }
