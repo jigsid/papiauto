@@ -24,7 +24,14 @@ interface ChatMessage {
 interface ChatHistory {
   history: ChatMessage[];
   automationId: string | null;
+  messageCount?: number;  // Track number of messages since keyword trigger
 }
+
+// Track active conversations and their message counts
+const activeConversations = new Map<string, {
+  messageCount: number;
+  lastKeywordTrigger: number;
+}>();
 
 async function isCommentProcessed(commentId: string) {
   // First check in-memory cache
@@ -65,6 +72,32 @@ async function markMessageAsProcessed(messageId: string) {
   processedMessages.add(messageId);
 }
 
+// Helper function to check if conversation is still active
+function isConversationActive(senderId: string): boolean {
+  const conversation = activeConversations.get(senderId);
+  if (!conversation) return false;
+  
+  // Check if conversation has exceeded 3 messages
+  return conversation.messageCount < 3;
+}
+
+// Helper function to increment message count
+function incrementMessageCount(senderId: string) {
+  const conversation = activeConversations.get(senderId);
+  if (conversation) {
+    conversation.messageCount += 1;
+    activeConversations.set(senderId, conversation);
+  }
+}
+
+// Helper function to reset conversation
+function resetConversation(senderId: string) {
+  activeConversations.set(senderId, {
+    messageCount: 0,
+    lastKeywordTrigger: Date.now()
+  });
+}
+
 export async function GET(req: NextRequest) {
   const hub = req.nextUrl.searchParams.get("hub.challenge");
   return new NextResponse(hub);
@@ -80,6 +113,8 @@ export async function POST(req: NextRequest) {
     // Handle DM messages
     if (webhook_payload.object === "instagram" && webhook_payload.entry?.[0]?.messaging) {
       const message = webhook_payload.entry[0].messaging[0];
+      const senderId = message.sender.id;
+      
       if (!message?.message?.mid || !message?.message?.text) {
         console.error("[Webhook Debug] Invalid message payload - missing mid or text");
         return NextResponse.json(
@@ -104,6 +139,8 @@ export async function POST(req: NextRequest) {
       console.error("[Webhook Debug] Keyword match result:", matcher);
 
       if (matcher && matcher.automationId) {
+        // Reset conversation when keyword is triggered
+        resetConversation(senderId);
         console.error("[Webhook Debug] Found matching automation:", matcher.automationId);
         const automation = await getKeywordAutomation(matcher.automationId, true);
         
@@ -143,6 +180,46 @@ export async function POST(req: NextRequest) {
           console.error("[Webhook Debug] No DM trigger found for automation:", automation.id);
         }
       } else {
+        // Check if this is part of an active conversation
+        if (isConversationActive(senderId)) {
+          console.error("[Webhook Debug] Continuing active conversation for user:", senderId);
+          const lastConversation = await getChatHistory(senderId, webhook_payload.entry[0].id);
+          
+          if (lastConversation && lastConversation.automationId) {
+            const automation = await getKeywordAutomation(lastConversation.automationId, true);
+            
+            if (automation?.trigger?.some(t => t.type === "DM")) {
+              await markMessageAsProcessed(message.message.mid);
+              
+              if (automation.listener?.listener === "SMARTAI" && 
+                  automation.User?.subscription?.plan === "PRO") {
+                incrementMessageCount(senderId);
+                const response = await handleSmartAIResponse(webhook_payload, automation);
+                
+                // If this was the third message, send reminder
+                const conversation = activeConversations.get(senderId);
+                if (conversation && conversation.messageCount >= 3) {
+                  // Send reminder message after a short delay
+                  setTimeout(async () => {
+                    try {
+                      await sendDM(
+                        webhook_payload.entry[0].id,
+                        senderId,
+                        "You've reached the message limit. Please trigger the keyword again to continue our conversation.",
+                        automation.User?.integrations[0].token!
+                      );
+                    } catch (error) {
+                      console.error("[Webhook Error] Failed to send reminder message:", error);
+                    }
+                  }, 1000);
+                }
+                
+                return response;
+              }
+            }
+          }
+        }
+        
         console.error("[Webhook Debug] No matching keyword automation found for text:", message.message.text);
       }
 
