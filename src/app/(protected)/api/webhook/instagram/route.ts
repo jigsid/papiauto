@@ -16,11 +16,34 @@ import { NextRequest, NextResponse } from "next/server";
 const processedComments = new Set<string>();
 
 async function isCommentProcessed(commentId: string) {
-  return processedComments.has(commentId);
+  // First check in-memory cache
+  if (processedComments.has(commentId)) {
+    return true;
+  }
+  
+  // Then check database
+  const processed = await client.processedComment.findFirst({
+    where: { commentId }
+  });
+  
+  if (processed) {
+    // Add to in-memory cache for future checks
+    processedComments.add(commentId);
+    return true;
+  }
+  
+  return false;
 }
 
-async function markCommentAsProcessed(commentId: string) {
+async function markCommentAsProcessed(commentId: string, automationId: string) {
   processedComments.add(commentId);
+  await client.processedComment.create({
+    data: {
+      commentId,
+      automationId,
+      processed: true
+    }
+  });
 }
 
 export async function GET(req: NextRequest) {
@@ -39,26 +62,37 @@ export async function POST(req: NextRequest) {
 
     // Handle DM messages
     if (webhook_payload.entry[0].messaging) {
-      matcher = await matchKeyword(
-        webhook_payload.entry[0].messaging[0].message.text
-      );
+      const messageText = webhook_payload.entry[0].messaging[0].message.text;
+      const senderId = webhook_payload.entry[0].messaging[0].sender.id;
+      const recipientId = webhook_payload.entry[0].messaging[0].recipient.id;
+
+      // First try to match keyword
+      matcher = await matchKeyword(messageText);
       
+      let automation;
       if (matcher && matcher.automationId) {
-        const automation = await getKeywordAutomation(matcher.automationId, true);
-        
-        if (automation && automation.trigger) {
-          // Handle Smart AI responses
-          if (
-            automation.listener &&
-            automation.listener.listener === "SMARTAI" &&
-            automation.User?.subscription?.plan === "PRO"
-          ) {
-            return await handleSmartAIResponse(webhook_payload, automation);
-          } 
-          // Handle regular message responses
-          else if (automation.listener && automation.listener.listener === "MESSAGE") {
-            return await handleRegularMessage(webhook_payload, automation);
-          }
+        automation = await getKeywordAutomation(matcher.automationId, true);
+      } else {
+        // If no keyword match, check if there's an existing conversation with Smart AI
+        const history = await getChatHistory(senderId, recipientId);
+        if (history && history.automationId) {
+          // Get the automation from the last conversation
+          automation = await findAutomation(history.automationId);
+        }
+      }
+      
+      if (automation && automation.trigger) {
+        // Handle Smart AI responses
+        if (
+          automation.listener &&
+          automation.listener.listener === "SMARTAI" &&
+          automation.User?.subscription?.plan === "PRO"
+        ) {
+          return await handleSmartAIResponse(webhook_payload, automation);
+        } 
+        // Handle regular message responses (only for keyword triggers)
+        else if (matcher && automation.listener && automation.listener.listener === "MESSAGE") {
+          return await handleRegularMessage(webhook_payload, automation);
         }
       }
     }
@@ -88,34 +122,43 @@ export async function POST(req: NextRequest) {
               );
               
               if (comment_reply.status === 200) {
-                await markCommentAsProcessed(commentId);
+                // Mark comment as processed before sending DM to prevent race conditions
+                await markCommentAsProcessed(commentId, automation.id);
                 await trackResponses(automation.id, "COMMENT");
                 
                 // Check if DM trigger is also enabled
                 const hasDmTrigger = automation.trigger.some(t => t.type === "DM");
                 
                 if (hasDmTrigger) {
-                  // If Smart AI is enabled, use that for DM
-                  if (
-                    automation.listener?.listener === "SMARTAI" &&
-                    automation.User?.subscription?.plan === "PRO"
-                  ) {
-                    const aiResponse = await handleSmartAIResponse(webhook_payload, automation, true);
-                    if (aiResponse.status === 200) {
-                      await trackResponses(automation.id, "DM");
-                    }
-                  } 
-                  // Otherwise send regular DM
-                  else {
-                    const direct_message = await sendDM(
-                      webhook_payload.entry[0].id,
-                      webhook_payload.entry[0].changes[0].value.from.id,
-                      automation.listener?.prompt || "",
-                      automation.User?.integrations[0].token!
-                    );
+                  const userId = webhook_payload.entry[0].changes[0].value.from.id;
+                  const processedDmKey = `${commentId}_${userId}_dm`;
+                  
+                  // Only send DM if we haven't processed this combination before
+                  if (!processedComments.has(processedDmKey)) {
+                    processedComments.add(processedDmKey);
                     
-                    if (direct_message.status === 200) {
-                      await trackResponses(automation.id, "DM");
+                    // If Smart AI is enabled, use that for DM
+                    if (
+                      automation.listener?.listener === "SMARTAI" &&
+                      automation.User?.subscription?.plan === "PRO"
+                    ) {
+                      const aiResponse = await handleSmartAIResponse(webhook_payload, automation, true);
+                      if (aiResponse.status === 200) {
+                        await trackResponses(automation.id, "DM");
+                      }
+                    } 
+                    // Otherwise send regular DM
+                    else {
+                      const direct_message = await sendDM(
+                        webhook_payload.entry[0].id,
+                        webhook_payload.entry[0].changes[0].value.from.id,
+                        automation.listener?.prompt || "",
+                        automation.User?.integrations[0].token!
+                      );
+                      
+                      if (direct_message.status === 200) {
+                        await trackResponses(automation.id, "DM");
+                      }
                     }
                   }
                 }
@@ -177,10 +220,16 @@ async function handleSmartAIResponse(webhook_payload: any, automation: any, isCo
     const messageHistory = customer_history?.history.map(msg => ({
       role: (msg.role === 'assistant' ? 'model' : 'user') as 'model' | 'user',
       text: msg.content
-    }));
+    })) || [];
+
+    // Add current message to history for context
+    messageHistory.push({
+      role: 'user',
+      text: messageText
+    });
 
     // Generate response using Gemini
-    const context = `This is an Instagram ${isCommentDM ? 'comment' : 'DM'} conversation.`;
+    const context = `This is an Instagram ${isCommentDM ? 'comment' : 'DM'} conversation. You are a helpful AI assistant managing this Instagram account. Keep responses concise and engaging.`;
     const smart_ai_response = await generateResponse(
       messageText,
       context,
@@ -188,21 +237,21 @@ async function handleSmartAIResponse(webhook_payload: any, automation: any, isCo
     );
 
     if (smart_ai_response.text) {
-      const reciever = createChatHistory(
+      // Save user's message to history
+      await createChatHistory(
         automation.id,
         senderId,
         recipientId,
         messageText
       );
 
-      const sender = createChatHistory(
+      // Save AI's response to history
+      await createChatHistory(
         automation.id,
         recipientId,
         senderId,
         smart_ai_response.text
       );
-
-      await client.$transaction([reciever, sender]);
 
       const direct_message = await sendDM(
         webhook_payload.entry[0].id,
