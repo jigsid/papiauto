@@ -24,6 +24,11 @@ const IntegrationCard = ({ description, icon, strategy, title }: Props) => {
     }
   };
 
+  // Force an immediate refetch when component mounts
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: ["user-profile"] });
+  }, [queryClient]);
+
   // Listen for focus events to refresh connection status
   useEffect(() => {
     const onFocus = () => {
@@ -39,10 +44,13 @@ const IntegrationCard = ({ description, icon, strategy, title }: Props) => {
     // Refresh every 5 seconds while window is focused
     refetchInterval: 5000,
     refetchIntervalInBackground: false,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true
   });
 
-  const integrated = data?.data?.integrations.find(
-    (integration) => integration.name === strategy
+  // More robust integration check
+  const integrated = data?.data?.integrations?.some(
+    (integration) => integration?.name === strategy
   );
 
   return (
@@ -54,7 +62,7 @@ const IntegrationCard = ({ description, icon, strategy, title }: Props) => {
       </div>
       <Button
         onClick={integrated ? () => refetch() : onInstaOAuth}
-        disabled={integrated?.name === strategy}
+        disabled={integrated}
         className="bg-gradient-to-br text-white rounded-full text-lg from-[#3352CC] font-medium to-[#1C2D70] hover:opacity-70 transition duration-100"
       >
         {integrated ? "Connected" : "Connect"}

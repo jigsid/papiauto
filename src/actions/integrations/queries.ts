@@ -44,6 +44,7 @@ export const createIntegration = async (
     data: {
       integrations: {
         create: {
+          name: 'INSTAGRAM',
           token,
           expiresAt: expire,
           instagramId: igId,
