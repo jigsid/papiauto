@@ -55,6 +55,13 @@ export const sendPrivateMessage = async (
   );
 };
 
+// Helper function to generate consistent redirect URI
+export const getInstagramRedirectUri = () => {
+  const baseUrl = process.env.NEXT_PUBLIC_HOST_URL || '';
+  // Ensure there's no trailing slash and add the callback path
+  return `${baseUrl.replace(/\/+$/, '')}/callback/instagram`;
+};
+
 export const generateTokens = async (code: string) => {
   try {
     // Use URLSearchParams instead of FormData for server-side compatibility
@@ -65,8 +72,7 @@ export const generateTokens = async (code: string) => {
       process.env.INSTAGRAM_CLIENT_SECRET as string
     );
     params.append("grant_type", "authorization_code");
-    // Remove trailing slash to match exactly with Facebook app settings
-    const redirectUri = `${process.env.NEXT_PUBLIC_HOST_URL}callback/instagram`.replace(/\/+$/, '');
+    const redirectUri = getInstagramRedirectUri();
     params.append("redirect_uri", redirectUri);
     params.append("code", code);
 
@@ -76,7 +82,7 @@ export const generateTokens = async (code: string) => {
       code: code
     });
 
-    const shortTokenRes = await fetch(process.env.INSTAGRAM_TOKEN_URL as string, {
+    const shortTokenRes = await fetch("https://api.instagram.com/oauth/access_token", {
       method: "POST",
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -95,9 +101,9 @@ export const generateTokens = async (code: string) => {
       return null;
     }
 
-    // Exchange short-lived token for long-lived token
+    // Exchange short-lived token for long-lived token using Graph API
     const long_token = await axios.get(
-      `${process.env.INSTAGRAM_BASE_URL}/access_token?grant_type=ig_exchange_token&client_secret=${process.env.INSTAGRAM_CLIENT_SECRET}&access_token=${token.access_token}`
+      `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${process.env.INSTAGRAM_CLIENT_SECRET}&access_token=${token.access_token}`
     );
 
     if (!long_token.data.access_token) {

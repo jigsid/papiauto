@@ -2,13 +2,16 @@
 
 import { onCurrentUser } from "../user";
 import { createIntegration, getIntegration, updateIntegration } from "./queries";
-import { generateTokens } from "@/lib/fetch";
+import { generateTokens, getInstagramRedirectUri } from "@/lib/fetch";
 import axios from "axios";
 
 export const onOAuthInstagram = async (strategy: "INSTAGRAM" | "CRM") => {
   if (strategy === "INSTAGRAM") {
-    const url = process.env.INSTAGRAM_EMBEDDED_OAUTH_URL;
-    if (!url) throw new Error("OAuth URL not configured");
+    const clientId = process.env.INSTAGRAM_CLIENT_ID;
+    const redirectUri = getInstagramRedirectUri();
+    const scope = 'instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish,instagram_business_manage_insights';
+    
+    const url = `https://www.instagram.com/oauth/authorize?enable_fb_login=0&force_authentication=1&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}`;
     return url;
   }
   return null;
