@@ -6,6 +6,9 @@ import { redirect } from 'next/navigation'
 import { createUser, findUser } from './queries'
 import { refreshToken } from '@/lib/fetch'
 import { updateIntegration } from '../integrations/queries'
+import { createDemoUser } from './demo'
+
+export { createDemoUser }
 
 export const onCurrentUser = async () => {
   const user = await currentUser()

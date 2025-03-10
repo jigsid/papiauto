@@ -22,6 +22,8 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, ReactNode } from "react";
 import ChatbotIframe from "./chatbotiframe";
+import DemoSignInButton from '@/components/demo-sign-in-button'
+import DirectDemoLogin from '@/components/direct-demo-login'
 
 interface FloatingElementProps {
   children: ReactNode;
@@ -279,6 +281,10 @@ export default function Home() {
                     </motion.div>
                   </Link>
                 </Button>
+                <DirectDemoLogin 
+                  variant="secondary"
+                  className="bg-yellow-500 hover:bg-yellow-600 text-black font-medium transform hover:scale-105 transition-all"
+                />
                 <Button
                   size="lg"
                   variant="outline"
@@ -287,6 +293,15 @@ export default function Home() {
                   Learn More
                 </Button>
               </motion.div>
+              
+              <motion.p
+                className="mt-4 text-sm text-blue-300 opacity-80"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, delay: 0.8 }}
+              >
+                ✨ Try Demo instantly gives you access to all features - no sign up required!
+              </motion.p>
             </div>
 
             <motion.div
