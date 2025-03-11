@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Loader2 } from 'lucide-react'
+import { setDemoMode } from '@/lib/demo-utils'
 
 interface DirectDemoLoginProps {
   variant?: 'default' | 'outline' | 'secondary' | 'destructive' | 'ghost' | 'link'
@@ -21,14 +22,13 @@ export default function DirectDemoLogin({
     try {
       setIsLoading(true)
       
-      // Set demo mode in both sessionStorage and cookies
-      sessionStorage.setItem('demoMode', 'true')
-      document.cookie = 'demoMode=true; path=/; max-age=3600;' // 1 hour expiration
+      // Set demo mode using our utility function
+      setDemoMode()
       
       // Redirect directly to dashboard with demo flag to bypass authentication
       window.location.href = '/dashboard?demo=true'
     } catch (error) {
-      console.error('Error navigating to demo login:', error)
+      console.error('Error navigating to demo:', error)
       setIsLoading(false)
     }
   }

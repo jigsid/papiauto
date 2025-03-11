@@ -3,6 +3,7 @@
 import { useEffect, useState, ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { Info, X } from 'lucide-react'
+import { isClientDemoMode, setDemoMode, clearDemoMode } from '@/lib/demo-utils'
 
 interface DemoModeWrapperProps {
   children: ReactNode
@@ -22,9 +23,8 @@ export default function DemoModeWrapper({ children }: DemoModeWrapperProps) {
       if (demoParam === 'true') {
         setIsDemoMode(true)
         
-        // Store in both sessionStorage and cookies for better persistence
-        sessionStorage.setItem('demoMode', 'true')
-        document.cookie = 'demoMode=true; path=/; max-age=3600;' // 1 hour expiration
+        // Set demo mode using our utility function
+        setDemoMode()
         
         // Remove the demo parameter from URL
         urlParams.delete('demo')
@@ -33,10 +33,8 @@ export default function DemoModeWrapper({ children }: DemoModeWrapperProps) {
           window.location.hash
         window.history.replaceState({}, '', newUrl)
       } else {
-        // Check storage
-        const storedDemoMode = sessionStorage.getItem('demoMode') === 'true' || 
-                              document.cookie.includes('demoMode=true')
-        if (storedDemoMode) {
+        // Check if demo mode is active using our utility function
+        if (isClientDemoMode()) {
           setIsDemoMode(true)
         }
       }
@@ -58,8 +56,7 @@ export default function DemoModeWrapper({ children }: DemoModeWrapperProps) {
   // Function to exit demo mode if needed
   const exitDemoMode = () => {
     setIsDemoMode(false)
-    sessionStorage.removeItem('demoMode')
-    document.cookie = 'demoMode=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT;'
+    clearDemoMode()
     window.location.href = '/' // Return to home page
   }
 

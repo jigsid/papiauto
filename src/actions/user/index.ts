@@ -1,23 +1,52 @@
 'use server'
 
 import { currentUser } from '@clerk/nextjs/server'
-
 import { redirect } from 'next/navigation'
 import { createUser, findUser } from './queries'
 import { refreshToken } from '@/lib/fetch'
 import { updateIntegration } from '../integrations/queries'
 import { createDemoUser } from './demo'
+import { isDemoMode, getDemoOrRealUser, protectWithDemoMode } from './demo-wrapper'
 
 export { createDemoUser }
 
-export const onCurrentUser = async () => {
-  const user = await currentUser()
-  if (!user) return redirect('/sign-in')
+// Demo user data for server actions
+const DEMO_USER_DATA = {
+  id: 'demo-user-id',
+  firstname: 'Demo',
+  lastname: 'User',
+  email: 'demo@example.com',
+  subscription: {
+    status: 'active',
+    plan: 'PRO' as 'PRO' | 'FREE',
+    trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+  },
+  integrations: [
+    {
+      id: 'demo-integration-1',
+      name: 'Instagram',
+      token: 'demo-token',
+      expiresAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000), // 60 days from now
+    }
+  ]
+}
 
-  return user
+export const onCurrentUser = async () => {
+  return await protectWithDemoMode(() => currentUser())
 }
 
 export const onBoardUser = async () => {
+  // If in demo mode, return demo user data
+  if (await isDemoMode()) {
+    return {
+      status: 200,
+      data: {
+        firstname: DEMO_USER_DATA.firstname,
+        lastname: DEMO_USER_DATA.lastname,
+      },
+    }
+  }
+
   const user = await onCurrentUser()
   try {
     const found = await findUser(user.id)
@@ -69,6 +98,11 @@ export const onBoardUser = async () => {
 }
 
 export const onUserInfo = async () => {
+  // If in demo mode, return demo user data
+  if (await isDemoMode()) {
+    return { status: 200, data: DEMO_USER_DATA }
+  }
+
   const user = await onCurrentUser()
   try {
     const profile = await findUser(user.id)

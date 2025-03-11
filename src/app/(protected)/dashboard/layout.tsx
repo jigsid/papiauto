@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
-import DemoBanner from '@/components/demo-banner'
+import { useDemoMode } from '@/context/demo-context'
 
 export default function DashboardLayout({
   children,
@@ -15,11 +15,26 @@ export default function DashboardLayout({
   const pathName = usePathname();
   const route = pathName?.split("/").pop() as string;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const { isDemoMode, exitDemoMode } = useDemoMode();
 
   return (
     <section className="w-full h-full max-h-screen">
       <div className="flex flex-col h-screen">
-        <DemoBanner />
+        {isDemoMode && (
+          <div className="bg-yellow-500 text-black py-2 px-4 flex items-center justify-between text-sm font-medium">
+            <div className="flex items-center gap-x-2">
+              <span>
+                You are in <strong>Demo Mode</strong> with full access to all features.
+              </span>
+              <button 
+                onClick={exitDemoMode}
+                className="ml-2 px-2 py-1 bg-black text-white rounded-md text-xs hover:bg-gray-800 transition-colors"
+              >
+                Exit Demo
+              </button>
+            </div>
+          </div>
+        )}
         <nav className="flex w-full items-center justify-between px-4 border-b h-16">
           {!isSidebarOpen ? (
             <Menu
