@@ -225,11 +225,28 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Small video player positioned at top-left with -45° rotation */}
+            <motion.div
+              className="absolute left-4 md:left-10 top-32 w-48 md:w-64 rounded-lg overflow-hidden shadow-xl z-10"
+              initial={{ opacity: 0, rotate: 0 }}
+              animate={{ opacity: 0.9, rotate: -45 }}
+              transition={{ duration: 0.7, delay: 0.3 }}
+              style={{ transform: "rotate(-45deg)" }}
+            >
+              <div className="bg-gradient-to-t from-blue-900/50 to-transparent absolute inset-0 pointer-events-none z-10 rounded-lg" />
+              <video 
+                src="/insta-compressed.mp4" 
+                autoPlay 
+                muted 
+                loop 
+                playsInline
+                className="w-full h-auto rounded-lg hover:scale-105 transition-transform duration-700"
+                style={{ maxHeight: "140px", objectFit: "cover" }}
+              />
+            </motion.div>
+
             <div className="mx-auto mt-16 max-w-3xl text-center relative">
               <motion.div
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.5 }}
                 className="absolute -top-20 -right-20 text-blue-500/20"
               >
                 <Instagram className="w-40 h-40" />
