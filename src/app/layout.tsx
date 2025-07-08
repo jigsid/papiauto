@@ -12,7 +12,7 @@ import { DemoProvider } from '@/context/demo-context'
 const jakarta = Plus_Jakarta_Sans({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Slide',
+  title: 'Boostly',
   description: 'Automate DMs and comments on instagram',
 }
 
@@ -33,7 +33,7 @@ export default function RootLayout({
             defaultTheme="dark"
             enableSystem={false}
             disableTransitionOnChange
-            storageKey="slide-theme"
+            storageKey="boostly-theme"
           >
             <ReduxProvider>
               <ReactQueryProvider>

@@ -12,13 +12,13 @@ month and today we will be building a better version of Min chats powered by
 0:40
 AI in this free course you will learn how to build a SAS product just like
 0:46
-many chat slide is an automation tool built specifically for Instagram that allows users to capture and nurture
+many chat Boostly is an automation tool built specifically for Instagram that allows users to capture and nurture
 0:53
 leads through an automation sequence when viewers comment or send you a DM with a specific keyword we can use that
 1:00
 as a trigger to fire off automations that send that user a DM and that's why
 1:05
-it's called slide cuz you can slide in people's DMS and so this is the only video on YouTube that will teach you how
+it's called Boostly because you can boost your engagement and slide into people's DMs and so this is the only video on YouTube that will teach you how
 1:10
 to build a many chat clone there's not a single Source out there that can physically teach you how to build an
 1:17
@@ -30,11 +30,11 @@ inside this course and so by just watching this YouTube video you can potentiall
 1:34
 into learning how to build a product let's understand how it works that way we know what we're building before we
 1:40
-start so please do not skip this part or the next section because I'm going to explain how slide Works under the hood
+start so please do not skip this part or the next section because I'm going to explain how Boostly Works under the hood
 1:47
-automations in slide are powered by triggers and a trigger fires when a user
+automations in Boostly are powered by triggers and a trigger fires when a user
 1:52
-comments with a keyword or sends you a DM with a specific keyword and the reason why slide is so much better than
+comments with a keyword or sends you a DM with a specific keyword and the reason why Boostly is so much better than
 1:59
 many chat is not only can we send a single DM as a response to this viewer
 2:04
@@ -178,7 +178,7 @@ pretty much what you tell it to do so if you wanted to close in the DMS or send 
 9:18
 more information and help people who are showing up in your DMs and asking for support anything will work as long as
 9:25
-you create a prompt that's doing exactly what you're looking for and so when another cool thing with slide is all
+you create a prompt that's doing exactly what you're looking for and so when another cool thing with Boostly is all
 9:31
 your messages that are sent through the automation will end up in the user's primary inbox it will not go into the
 9:37
@@ -192,14 +192,14 @@ the pricing plan with many chats your pricing will grow as you have more users
 10:01
 so let's say if I open an account on Min chat if I have 1 million contacts with Min chat I will have to spend $5,000
 10:09
-every single month to run many chats and that to me sounds unreasonable and that's why slide is slightly different
+every single month to run many chats and that to me sounds unreasonable and that's why Boostly is slightly different
 10:16
 it's unlimited automations and unlimited contacts it doesn't matter you can send unlimited messages as long as you're
 10:23
-paying $99 $97 per month and that's pretty much it right so here are some reasons why slide stands out and there's
+paying $99 $97 per month and that's pretty much it right so here are some reasons why Boostly stands out and there's
 10:29
 so so many more you'll come to know as we keep building this application but that's it for this demo and let's move
-How Slide works under the hood
+How Boostly works under the hood
 10:34
 on to the most important part in this SAS which is understanding how everything works under the hood all right guys so this is the most important
 10:41
