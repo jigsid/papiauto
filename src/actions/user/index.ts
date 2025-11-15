@@ -60,18 +60,25 @@ export const onBoardUser = async () => {
         if (days < 5) {
           console.log('refresh')
 
-          const refresh = await refreshToken(found.integrations[0].token)
+          try {
+            const refresh = await refreshToken(found.integrations[0].token)
 
-          const today = new Date()
-          const expire_date = today.setDate(today.getDate() + 60)
+            const today = new Date()
+            const expire_date = today.setDate(today.getDate() + 60)
 
-          const update_token = await updateIntegration(
-            refresh.access_token,
-            new Date(expire_date),
-            found.integrations[0].id
-          )
-          if (!update_token) {
-            console.log('Update token failed')
+            const update_token = await updateIntegration(
+              refresh.access_token,
+              new Date(expire_date),
+              found.integrations[0].id
+            )
+            if (!update_token) {
+              console.log('Update token failed')
+            }
+          } catch (error: any) {
+            // Token refresh failed - token may be expired or invalid
+            // Log the error but continue without crashing
+            console.error('Failed to refresh Instagram token:', error?.response?.data || error?.message || error)
+            // The integration will need to be re-authenticated
           }
         }
       }

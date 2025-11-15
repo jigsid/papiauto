@@ -57,7 +57,11 @@ export async function protectWithDemoMode(clerkUserFn: () => Promise<any>, redir
     const user = await clerkUserFn()
     if (!user) redirect(redirectPath)
     return user
-  } catch (error) {
+  } catch (error: any) {
+    // Re-throw redirect errors - they are expected behavior in Next.js
+    if (error?.digest?.startsWith('NEXT_REDIRECT')) {
+      throw error
+    }
     console.error('Error protecting route:', error)
     redirect(redirectPath)
   }
